@@ -11,6 +11,7 @@ p_load(rio,
        visdat,
        dplyr,
        rvest,
+       caret,
        MASS)
 
 # Importar datos ----------------------------------------------------------
