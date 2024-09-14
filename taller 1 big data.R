@@ -42,9 +42,10 @@ linear_model<- lm(lw ~ age + I(age^2), data=df  )
 df$predict<-predict(linear_model)
 
 ggplot(df, aes(x=age, y=predict)) +
-  theme_bw() + 
+  theme_classic() + 
+  theme(panel.grid.major = element_line(color = "gray"),
+        plot.title = element_text(hjust = 0.5))+
   geom_point(colour="red",size=3) +
   labs(y="Predicciones del logaritmo del salario", x="edad")+
   ggtitle("Precicciones del salario por edad")
-
 
