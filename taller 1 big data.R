@@ -38,6 +38,7 @@ summary(df$sex)
 
 df<- df %>%
      mutate(lw= ifelse(ingtot > 0, log(ingtot), 0))
+# Predecir el  salario  por edad  ---------------------------------------
 
 linear_model<- lm(lw ~ age + I(age^2), data=df  )
 df$predict<-predict(linear_model)
