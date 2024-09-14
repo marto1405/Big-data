@@ -36,11 +36,15 @@ summary(df$ingtot)
 summary(df$sex)
 
 df<- df %>%
-     mutate(lw= ifelse(ingtot > 0, log(ingtot), NA))
+     mutate(lw= ifelse(ingtot > 0, log(ingtot), 0))
 
 linear_model<- lm(lw ~ age + I(age^2), data=df  )
-summary(linear_model)
-  
-predict<- predict(linear_model)
+df$predict<-predict(linear_model)
+
+ggplot(df, aes(x=age, y=predict)) +
+  theme_bw() + 
+  geom_point(colour="red",size=3) +
+  labs(y="Predicciones del logaritmo del salario", x="edad")+
+  ggtitle("Precicciones del salario por edad")
 
 
