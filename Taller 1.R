@@ -41,8 +41,8 @@ rm(db)
 ### Arreglo de la base de datos                                              ###
 ################################################################################
 
-data <- read.table(file = "C:/Users/Esteban/Dropbox/Estudios/Big Data y Machine Learning/Talleres/Taller 1/data.csv",
-                   header = TRUE, sep = "|")
+#data <- read.table(file = "C:/Users/Esteban/Dropbox/Estudios/Big Data y Machine Learning/Talleres/Taller 1/data.csv",
+#                   header = TRUE, sep = "|")
 #View(data)
 summary(data$age)
 summary(data$totalHoursWorked)
