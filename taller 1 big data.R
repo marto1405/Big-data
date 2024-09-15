@@ -68,3 +68,45 @@ set.seed(11052004)
 rboot<-boot(df,peakage, R = 1000)
 boot.ci(rboot, type = "perc")
 
+###Diferencias de genero (4) ----------------------------------------------------
+
+model3 <- lm(lw ~ sex, data = df)
+summary(model3)
+
+stargazer(model3, type = "text", title = "Regresión de Log(Wage) sobre Female", 
+          covariate.labels = c("male"), 
+          dep.var.labels = "Log(Wage)", 
+          omit.stat = c("f", "ser", "adj.rsq"))
+
+####Usarenmos FWL
+
+# Regresión de log(wage) sobre los controles
+
+#Filtrar datos completos para las variables usadas en el modelo
+df_complete <- df %>%
+  filter(complete.cases(age, clase, college, cotPension, cuentaPropia, formal, 
+                        maxEducLevel, informal, microEmpresa, sizeFirm, totalHoursWorked))
+
+# Ajustar el modelo de regresión de log(wage) sobre los controles en los datos completos
+modelc1_ <- lm(lw ~ age + clase + college + cotPension + cuentaPropia + formal + 
+                         maxEducLevel + informal + microEmpresa + sizeFirm + totalHoursWorked, data = df_complete)
+
+# Extraer los residuos de esta regresión y añadir al dataframe completo
+df_complete <- df_complete %>%
+  mutate(residuos_y = resid(modelc1))
+
+# Ajustar el modelo de regresión de género sobre los controles en los datos completfs
+modelc2 <- lm(sex ~ age + clase + college + cotPension + cuentaPropia + formal + 
+                         maxEducLevel + informal + microEmpresa + sizeFirm + totalHoursWorked, data = db_complete)
+
+# Extraer los residuos de la regresión de género y añadir al dataframe completo
+df_complete <- df_complete %>%
+  mutate(residuos_genero = resid(modelc2))
+
+# Gender gap con controles
+modelo_fwl_gender <- lm(residuos_y ~ residuos_genero, data = db_complete)
+
+
+# Resumen del modelo FWL controlado
+stargazer(modelo_fwl_gender, type = "text", title = "Modelo FWL con controles adicionales",
+          out = "modelo_fwl_controlado.txt")
