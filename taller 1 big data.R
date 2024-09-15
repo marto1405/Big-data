@@ -56,4 +56,15 @@ print(names(coefS))
 p_age <- -coefS["age"] / (2 * coefS["I(age^2)"])
 p_age
 
+peakage <-peakage <- function(data, indices) {
+  d <- data[indices, ]  
+  linear_model <- lm(lw ~ age + I(age^2), data = d)  
+  coefs <- coef(linear_model)
+  coefs <- -coefs["age"] / (2 * coefs["I(age^2)"]) 
+  return(coefs)
+}
+
+set.seed(11052004)
+rboot<-boot(df,peakage, R = 1000)
+boot.ci(rboot, type = "perc")
 
