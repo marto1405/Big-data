@@ -51,3 +51,9 @@ ggplot(df, aes(x=age, y=predict)) +
   labs(y="Predicciones del logaritmo del salario", x="edad")+
   ggtitle("Precicciones del salario por edad")
 
+coefS <- coef(linear_model)
+print(names(coefS))
+p_age <- -coefS["age"] / (2 * coefS["I(age^2)"])
+p_age
+
+
