@@ -128,12 +128,205 @@ rm(denx,deny,x,y)
 ### 3. Age-wage profle                                                       ###
 ################################################################################
 
+data <- data %>%
+  filter(ingtot > 0) %>%
+  mutate(lny = log(ingtot),age2=age^2)
 
+
+model1 <- lm(lny ~ age + age2, data = data)
+summary(model1)
+
+model2 <- lm(lny ~ age , data = data)
+summary(model2)
+
+
+stargazer(model1, model2, type = "text", 
+          title = "Age-Wage Profile Comparison",
+          dep.var.labels = "log(Wage)",
+          covariate.labels = c("Age", "Age Squared"),
+          column.labels = c("Model 1", "Model 2"),
+          out = "regression_summary.txt")##
+
+#grafico comparcion
+
+
+ggplot(data, aes(x = age, y = lny)) +
+  geom_point(alpha = 0.5) +  # Reduce opacidad de los puntos
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = FALSE, color = "blue", linetype = "solid", size = 1.2) +  # Modelo 1 (polinomial)
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, color = "red", linetype = "dashed", size = 1.2) +  # Modelo 2 (lineal)
+  labs(title = "Estimated Age-Wage Profile", x = "Age", y = "Log(Wage)") +
+  xlim(20, 80)
+scale_color_manual(name = "Model", values = c("blue", "red")) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+
+# el pico máximo se da en:
+b1 = coef(model1)["age"]
+b2 = coef(model1)["age2"]
+peak_age = -b1/(2*b2)
+peak_age
+###Error estandar de peak_age
+
+# Obtener la matriz de varianza-covarianza
+vcov_matrix <- vcov(model1)
+
+# Extraer las varianzas y covarianzas necesarias
+var_b1 <- vcov_matrix["age", "age"]
+var_b2 <- vcov_matrix["age2", "age2"]
+cov_b1_b2 <- vcov_matrix["age", "age2"]
+
+# Calcular el error estándar de peak_age
+se_peak_age <- sqrt(
+  (1 / (2 * b2))^2 * var_b1 +
+    (b1 / (2 * b2^2))^2 * var_b2 +
+    2 * (1 / (2 * b2)) * (b1 / (2 * b2^2)) * cov_b1_b2
+)
+
+# Calcular el intervalo de confianza
+alpha <- 0.05
+z_score <- qnorm(1 - alpha / 2)
+conf_interval <- c(
+  peak_age - z_score * se_peak_age,
+  peak_age + z_score * se_peak_age
+)
+
+list(
+  peak_age = peak_age,
+  se_peak_age = se_peak_age,
+  conf_interval = conf_interval
+)
+########### bootstraping 
+
+
+# Definir la función para el bootstrap
+boot_fn_model1 <- function(data, indices) {
+  d <- data[indices, ]  # crea la muestra bootstrap
+  fit <- lm(lny ~ age + age2, data = data)
+  return(coef(fit))  # retornamos los coeficientes
+}
+
+
+# Realizar bootstrap para el modelo 1
+set.seed(10101)
+boot_results_model1 <- boot(data = data, statistic = boot_fn_model1, R = 1000)
+
+
+# Mostrar resultados del bootstrap para el modelo 1
+boot_results_model1
+
+
+# Intervalos de confianza para los coeficientes del modelo 1
+boot.ci(boot_results_model1, type = "perc", index = 2)  # Para age
+boot.ci(boot_results_model1, type = "perc", index = 3)  # Para age^2
+
+
+# Definir el rango de valores de edad para predecir
+age_grid <- seq(min(data$age), max(data$age), length.out = 100)
+
+# Crear un data frame con las edades y el valor de age^2
+pred_data <- data.frame(age = age_grid, age2 = age_grid^2)
+
+# Hacer predicciones usando el modelo 1
+predictions <- predict(model1, newdata = pred_data, interval = "confidence", level = 0.95)
+
+# Añadir las predicciones y los intervalos de confianza al data frame
+pred_data$fit <- predictions[, "fit"]
+pred_data$lwr <- predictions[, "lwr"]
+pred_data$upr <- predictions[, "upr"]
+
+# Graficar los resultados
+ggplot() +
+  geom_point(data = data, aes(x = age, y = lny), alpha = 0.2, color = "darkgray") +  # Puntos originales (más tenues)
+  geom_line(data = pred_data, aes(x = age, y = fit), color = "blue", size = 1.2) +  # Curva del modelo
+  geom_ribbon(data = pred_data, aes(x = age, ymin = lwr, ymax = upr), alpha = 0.4, fill = "blue") +  # Intervalos de confianza más visibles
+  labs(title = "Modelo de Edad-Salario con Intervalos de Confianza Más Evidentes",
+       x = "Edad",
+       y = "Log(Wage)") +
+  theme_minimal()
 ################################################################################
 ### 4. Gender earning GAP                                                    ###
 ################################################################################
 
+##Calumlamos la brecha sin controles
+model3 <- lm(lny ~ sex, data = data)
+summary(model3)
 
+stargazer(model3, type = "text", title = "Regresión de Log(Wage) sobre Female", 
+          covariate.labels = c("male"), 
+          dep.var.labels = "Log(Wage)", 
+          omit.stat = c("f", "ser", "adj.rsq"))
+
+
+####Usarenmos FWL
+
+# Regresión de log(wage) sobre los controles
+
+#Filtrar datos completos para las variables usadas en el modelo
+db_complete <- data %>%
+  filter(complete.cases(age, clase, college, cotPension, cuentaPropia, formal, 
+                        maxEducLevel, informal, microEmpresa, sizeFirm, totalHoursWorked))
+
+# Ajustar el modelo de regresión de log(wage) sobre los controles en los datos completos
+modelc1 <- lm(lny ~  clase + college + cotPension + cuentaPropia + formal + 
+                         maxEducLevel + informal + microEmpresa + sizeFirm + totalHoursWorked, data = db_complete)
+
+# Extraer los residuos de esta regresión y añadir al dataframe completo
+db_complete <- db_complete %>%
+  mutate(residuos_y = resid(modelc1))
+
+# Ajustar el modelo de regresión de género sobre los controles en los datos completos
+modelc2 <- lm(sex ~ clase + college + cotPension + cuentaPropia + formal + 
+                         maxEducLevel + informal + microEmpresa + sizeFirm + totalHoursWorked, data = db_complete)
+
+# Extraer los residuos de la regresión de género y añadir al dataframe completo
+db_complete <- db_complete %>%
+  mutate(residuos_genero = resid(modelc2))
+
+# Crear age2 si aún no está creado
+db_complete <- db_complete %>%
+  mutate(age2 = age^2)
+
+# Ajustar el modelo Frisch-Waugh-Lovell (FWL) con controles adicionales
+modelo_fwl_controlado <- lm(residuos_y ~ residuos_genero, data = db_complete)
+
+
+# Resumen del modelo FWL controlado
+stargazer(modelo_fwl_controlado, type = "text", title = "Modelo FWL con controles adicionales",
+          out = "modelo_fwl_controlado.txt")
+
+
+modelcP <- lm(lny ~ sex +clase + college + cotPension + cuentaPropia + formal + 
+                maxEducLevel + informal + microEmpresa + sizeFirm + totalHoursWorked, data = db_complete)
+
+stargazer(modelcP, type = "text", title = "Modelo FWL con controles adicionales",
+          out = "modelo_fwl_controlado.txt")
+
+
+#### las estimaciones coinciden
+
+
+# Crear la variable de interacción entre age2 y sex
+db_complete <- db_complete %>%
+  mutate(age2_sex = age2*residuos_genero, age_sex = age*residuos_genero  )
+
+
+
+modelo_fwl_edad <- lm(residuos_y ~ residuos_genero+ age+ age2+age_sex+ age2_sex, data = db_complete)
+
+stargazer(modelo_fwl_edad, type = "text", title = "Modelo FWL con controles adicionales",
+          out = "modelo_fwl_controlado.txt")
+
+
+b1 = coef(modelo_fwl_edad)["age"]
+b2 = coef(modelo_fwl_edad)["age2"]
+c1 = coef(modelo_fwl_edad)["age_sex"]
+c2 = coef(modelo_fwl_edad)["age2_sex"]
+peak_age_hombres = -(b1+c1)/(2*(b2+c2))
+peak_age_hombres
+
+peak_age_mujeres = -(b1)/(2*(b2))
+peak_age_mujeres
 ################################################################################
 ### 5. Predicting earning                                                    ###
 ################################################################################
