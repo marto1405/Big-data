@@ -55,7 +55,7 @@ data <- data %>% filter(age>=18 & totalHoursWorked>0)
 # es mejor quedarse solo con un subset.
 data <- data %>% select(orden,secuencia_p, age, cuentaPropia, cotPension, formal, mes, maxEducLevel, oficio,
 p6050, p6240, p6426, p7040, sex, sizeFirm, totalHoursWorked,relab, y_ingLab_m, y_total_m, y_gananciaNeta_m,
-p6510, p6545, p6580, p7495, p7500s2, p7500s3, p7505, p7510s3, p7510s5, p7510s6)
+p6510, p6545, p6580, p7495, p7500s2, p7500s3, p7505, p7510s3, p7510s5, p7510s6, ingtot, informal)
 
 # En este caso es razonable pensar que no responder es lo mismo que la opción NO
 mod <- c("p7040", "p6510", "p6545", "p6580", "p7495", "p7500s2", "p7500s3", "p7505", "p7510s3", "p7510s5", "p7510s6")
@@ -117,7 +117,7 @@ summary(data$p6426)
 quantile(data$p6426,c(0.9,0.95,0.99,1)) # número de meses en la empresa
 data = data %>% mutate(p6426 = ifelse(p6426>400, 400, p6426)) # corto al p99
 data = data %>% select(!c(p6050,y_gananciaNeta_m,y_total_m,mean_y_ingLab_m))
-data = data %>% mutate(female = ifelse(sex==1,0,1)) %>% select(-sex)
+data = data %>% mutate(female = ifelse(sex==1,0,1))
 rm(denx,deny,x,y)
 
 ################################################################################
