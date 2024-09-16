@@ -402,8 +402,44 @@ for (i in 1:length(model)) {
   predictions <- predict(modelo, testing)
   rmse[i] <- RMSE(predictions, testing$lny)
 }
+# Revisar datos atipicos
+
+modelo <- lm(form7, data = training)
+predictions <- predict(modelo, testing)
+testing$prediction_errors <- testing$lny - predictions
+ggplot(testing, aes(x = prediction_errors)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of errores predichos",
+       x = "Error predicho", y = "Frecuencia") +
+  theme_minimal()
+ggplot(testing, aes(x = prediction_errors)) +
+  geom_density(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of errores predichos",
+       x = "Error predicho", y = "Frecuencia") +
+  theme_minimal()
+percentiles <- quantile(testing$prediction_errors, probs = c(0.01, 0.99))
+outliers <- testing[testing$prediction_errors < percentiles[1] | testing$prediction_errors > percentiles[2], ]
+head(outliers)
+
+modelo <- lm(form8, data = training)
+predictions <- predict(modelo, testing)
+testing$prediction_errors <- testing$lny - predictions
+ggplot(testing, aes(x = prediction_errors)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of errores predichos",
+       x = "Error predicho", y = "Frecuencia") +
+  theme_minimal()
+ggplot(testing, aes(x = prediction_errors)) +
+  geom_density(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of errores predichos",
+       x = "Error predicho", y = "Frecuencia") +
+  theme_minimal()
+percentiles <- quantile(testing$prediction_errors, probs = c(0.01, 0.99))
+outliers <- testing[testing$prediction_errors < percentiles[1] | testing$prediction_errors > percentiles[2], ]
+head(outliers)
 
 #Realizamos el LOOCV
+
 ctrl <- trainControl(method = "LOOCV")
 
 modelo1c <- train(form8,
