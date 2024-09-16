@@ -335,3 +335,75 @@ peak_age_mujeres
 ### 5. Predicting earning                                                    ###
 ################################################################################
 
+set.seed(11052004)
+# dividir los datos en training and testeing
+inTrain <- createDataPartition(
+  y = data$ingtot,  ## the outcome data are needed
+  p = .70, ## The percentage of data in the training
+  list = FALSE)
+training <- data %>% 
+  filter(row_number() %in% inTrain)
+
+testing  <- data %>% 
+  filter(!row_number() %in% inTrain)
+form1<-lny ~ age + I(age^2)
+form2<- lny ~ age + I(age^2) + female + I(age^2)*female
+form3<- lny ~ age + I(age^2) + female + I(age^2)*female + clase + college + cotPension + cuentaPropia + formal + maxEducLevel + 
+  informal + microEmpresa + sizeFirm + totalHoursWorked
+form4 <- lny ~  poly(age, 3, raw=TRUE) +  female + poly(age, 3, raw=TRUE):female + clase + college + cotPension + cuentaPropia + formal +
+  poly(age, 3, raw=TRUE):formal + maxEducLevel + informal + poly(age, 3, raw=TRUE):informal + 
+  microEmpresa + sizeFirm + totalHoursWorked
+form5<- lny ~  poly(age,3,raw=TRUE) +  female + poly(age,3,raw=TRUE):female + clase + poly(age,3,raw=TRUE):clase + college + 
+  poly(age,3,raw=TRUE):college + cotPension + poly(age,3,raw=TRUE):cotPension + cuentaPropia + poly(age,3,raw=TRUE):cuentaPropia +
+  formal + poly(age,3,raw=TRUE):formal + maxEducLevel + poly(age,3,raw=TRUE):maxEducLevel + informal + poly(age,3,raw=TRUE):informal + 
+  microEmpresa + poly(age,3,raw=TRUE):microEmpresa + sizeFirm + poly(age,3,raw=TRUE):sizeFirm + 
+  totalHoursWorked + poly(age,3,raw=TRUE):totalHoursWorked
+form6<- lny ~  poly(age,3,raw=TRUE) +  poly(female,3,raw=TRUE) + poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) + 
+  clase + poly(age,3,raw=TRUE):clase + college + poly(age,3,raw=TRUE):college + cotPension + poly(age,3,raw=TRUE):cotPension + 
+  cuentaPropia + poly(age,3,raw=TRUE):cuentaPropia + formal + poly(age,3,raw=TRUE):formal + maxEducLevel + 
+  poly(age,3,raw=TRUE):maxEducLevel + informal + poly(age,3,raw=TRUE):informal + microEmpresa + 
+  poly(age,3,raw=TRUE):microEmpresa + sizeFirm + poly(age,3,raw=TRUE):sizeFirm + 
+  totalHoursWorked + poly(age,3,raw=TRUE):totalHoursWorked
+form7<- lny ~  poly(age,3,raw=TRUE) +  poly(female,3,raw=TRUE) + poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) + 
+  poly(age,3,raw=TRUE):poly(female,3,raw=TRUE):poly(college,3,raw=TRUE) +  clase + poly(age,3,raw=TRUE):clase + 
+  poly(college,3,raw=TRUE) + poly(age,3,raw=TRUE):poly(college,3,raw=TRUE) + cotPension + 
+  poly(age,3,raw=TRUE):cotPension + cuentaPropia + poly(age,3,raw=TRUE):cuentaPropia + formal + poly(age,3,raw=TRUE):formal + 
+  maxEducLevel + poly(age,3,raw=TRUE):maxEducLevel + informal + poly(age,3,raw=TRUE):informal + microEmpresa + 
+  poly(age,3,raw=TRUE):microEmpresa + poly(sizeFirm,3,raw=TRUE) + poly(age,3,raw=TRUE):sizeFirm + 
+  poly(college,3,raw=TRUE):poly(sizeFirm,3,raw=TRUE) + totalHoursWorked + poly(age,3,raw=TRUE):totalHoursWorked
+form8<- lny ~  poly(age,3,raw=TRUE) +  poly(female,3,raw=TRUE) + poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) + 
+  poly(clase,3,raw=TRUE) + poly(clase,3,raw=TRUE):poly(age,3,raw=TRUE) + poly(clase,3,raw=TRUE):poly(female,3,raw=TRUE)+
+  poly(college,3,raw=TRUE) + poly(college,3,raw=TRUE):poly(female,3,raw=TRUE) + poly(college,3,raw=TRUE):poly(age,3,raw=TRUE)+
+  poly(college,3,raw=TRUE):poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) + cotPension + cuentaPropia + formal +
+  poly(maxEducLevel,3,raw=TRUE)+ poly(maxEducLevel,3,raw=TRUE):poly(age,3,raw=TRUE) + poly(maxEducLevel,3,raw=TRUE):poly(female,3,raw=TRUE) +
+  poly(maxEducLevel,3,raw=TRUE):poly(college,3,raw=TRUE) + poly(maxEducLevel,3,raw=TRUE):poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) +
+  poly(maxEducLevel,3,raw=TRUE):poly(age,3,raw=TRUE):poly(female,3,raw=TRUE):poly(college,3,raw=TRUE) + informal +
+  poly(age,3,raw=TRUE):informal + poly(female,3,raw=TRUE):informal + poly(college,3,raw=TRUE):informal + 
+  poly(maxEducLevel,3,raw=TRUE):informal + microEmpresa + poly(sizeFirm,3,raw=TRUE) + poly(sizeFirm,3,raw=TRUE):poly(female,3,raw=TRUE) +
+  poly(sizeFirm,3,raw=TRUE):poly(age,3,raw=TRUE) + poly(sizeFirm,3,raw=TRUE):poly(college,3,raw=TRUE) + 
+  poly(sizeFirm,3,raw=TRUE):poly(maxEducLevel,3,raw=TRUE) + totalHoursWorked + poly(age,3,raw=TRUE):totalHoursWorked + 
+  poly(female,3,raw=TRUE):totalHoursWorked
+  
+# Estimar los modelos
+model <- list(form1, form2, form3, form4, form5, form6, form7, form8)
+rmse <- numeric(length(model))
+for (i in 1:length(model)) {
+  modelo <- lm(model[[i]], data = training)
+  predictions <- predict(modelo, testing)
+  rmse[i] <- RMSE(predictions, testing$lny)
+}
+
+#Realizamos el LOOCV
+ctrl <- trainControl(method = "LOOCV")
+
+modelo1c <- train(form8,
+                  data = data,
+                  method = 'lm', 
+                  trControl= ctrl)
+
+
+modelo2c <- train(form7,
+                  data = data,
+                  method = 'lm', 
+                  trControl= ctrl)
+modelo2c
