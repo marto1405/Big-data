@@ -1,6 +1,6 @@
 rm(list = ls())
 require(pacman)
-p_load(tidyverse, rvest,jsonlite,skimr,stargazer,rio,MASS, boot)
+p_load(tidyverse, rvest,jsonlite,skimr,stargazer,rio,MASS, boot, caret)
 select<-dplyr::select
 ################################################################################
 ### En esta primera parte del código se hará el scraping de la data          ###
