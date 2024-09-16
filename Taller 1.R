@@ -123,7 +123,19 @@ rm(denx,deny,x,y)
 ################################################################################
 ### Estadísticas descriptivas                                                ###
 ################################################################################
+data2 = data %>% select(ingtot,totalHoursWorked,female,
+                        age,jefe,cuentaPropia,formal) %>% as.data.frame()
+stargazer(data2, type="text",digits=2)
 
+table(data$maxEducLevel)
+table(data$oficio)
+table(data$sizeFirm)
+table(data$relab)
+
+data2 = data2 %>% mutate(ingtot = ingtot/1000000)
+data2 = data2 %>% mutate(ingtot = ifelse(ingtot>30,30,ingtot))
+ggplot( data = data2, mapping = aes(x = age, y = ingtot, 
+                                    color(factor(sex)))) + geom_point()
 ################################################################################
 ### 3. Age-wage profle                                                       ###
 ################################################################################
