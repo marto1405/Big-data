@@ -374,16 +374,14 @@ form7<- lny ~  poly(age,3,raw=TRUE) +  poly(female,3,raw=TRUE) + poly(age,3,raw=
 form8<- lny ~  poly(age,3,raw=TRUE) +  poly(female,3,raw=TRUE) + poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) + 
   poly(clase,3,raw=TRUE) + poly(clase,3,raw=TRUE):poly(age,3,raw=TRUE) + poly(clase,3,raw=TRUE):poly(female,3,raw=TRUE)+
   poly(college,3,raw=TRUE) + poly(college,3,raw=TRUE):poly(female,3,raw=TRUE) + poly(college,3,raw=TRUE):poly(age,3,raw=TRUE)+
-  poly(college,3,raw=TRUE):poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) + cotPension + cuentaPropia + formal +
+  + cotPension + cuentaPropia + formal +
   poly(maxEducLevel,3,raw=TRUE)+ poly(maxEducLevel,3,raw=TRUE):poly(age,3,raw=TRUE) + poly(maxEducLevel,3,raw=TRUE):poly(female,3,raw=TRUE) +
-  poly(maxEducLevel,3,raw=TRUE):poly(college,3,raw=TRUE) + poly(maxEducLevel,3,raw=TRUE):poly(age,3,raw=TRUE):poly(female,3,raw=TRUE) +
-  poly(maxEducLevel,3,raw=TRUE):poly(age,3,raw=TRUE):poly(female,3,raw=TRUE):poly(college,3,raw=TRUE) + informal +
+  poly(maxEducLevel,3,raw=TRUE):poly(college,3,raw=TRUE)  + informal +
   poly(age,3,raw=TRUE):informal + poly(female,3,raw=TRUE):informal + poly(college,3,raw=TRUE):informal + 
   poly(maxEducLevel,3,raw=TRUE):informal + microEmpresa + poly(sizeFirm,3,raw=TRUE) + poly(sizeFirm,3,raw=TRUE):poly(female,3,raw=TRUE) +
-  poly(sizeFirm,3,raw=TRUE):poly(age,3,raw=TRUE) + poly(sizeFirm,3,raw=TRUE):poly(college,3,raw=TRUE) + 
   poly(sizeFirm,3,raw=TRUE):poly(maxEducLevel,3,raw=TRUE) + totalHoursWorked + poly(age,3,raw=TRUE):totalHoursWorked + 
   poly(female,3,raw=TRUE):totalHoursWorked
-  
+
 # Estimar los modelos
 model <- list(form1, form2, form3, form4, form5, form6, form7, form8)
 rmse <- numeric(length(model))
