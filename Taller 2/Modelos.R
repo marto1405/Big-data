@@ -361,3 +361,63 @@ predictSample[is.na(predictSample)] <- 0
 skim(predictSample)
 name<- paste("XGboost", ".csv") 
 write.csv(predictSample,name, row.names = FALSE)
+
+
+grid_xbgoost <- expand.grid(nrounds = c(100,250),
+                            max_depth = c(2,4), 
+                            eta = c(0.01,0.05), 
+                            gamma = c(0,1), 
+                            min_child_weight = c(10, 25),
+                            colsample_bytree = c(0.33,0.66),
+                            subsample = c(0.4,0.8))
+
+grid_xbgoost
+set.seed(1011)
+Xgboost_tree <- train(Pobre ~ Edad + Sexo + Dinero_Otros_Hogares + Pagos_Arriendos +
+                        Ingreso_Desempleado_Otro + Afiliacion_Seguridad_Social +
+                        Horas_Trabajo_Normales + Menos_100 + Mas_100 +
+                        Regimen_contributivo + Regimen_especial +  
+                        Cotizando_Pensiones + max_educbasica + max_educsuperior + n_hijos +
+                        cuartos_totales + dormitorios + Nper,
+                      data=train,
+                      method = "xgbTree", 
+                      trControl = fitControl,
+                      tuneGrid=grid_xbgoost
+)        
+
+Xgboost_tree
+Xgboost_tree$bestTune
+
+# Predecir probabilidades en el conjunto de entrenamiento
+train_pred <- predict(gbm_tree, newdata = train, type = "prob")[,2]
+
+# Crear el objeto ROC
+roc_obj_rf <- roc(response = train$Pobre, 
+                  predictor = train_pred, 
+                  levels = c("No", "Yes"), 
+                  direction = "<")
+
+# Calcular el mejor umbral
+rfThresh <- coords(roc_obj_rf, x = "best", best.method = "closest.topleft")
+print(rfThresh)
+
+# Predecir en el conjunto de prueba
+test_pred <- predict(gbm_tree, newdata = test, type = "prob")
+
+# Aplicar el umbral para convertir probabilidades en predicciones binarias
+predictSample <- test %>%
+  mutate(pobre = ifelse(test_pred[, 2] >= rfThresh$threshold, 1, 0))
+
+# Ver las primeras filas del conjunto de prueba con la nueva columna "pobre"
+head(predictSample)
+
+predictSample <- predictSample %>%
+  select(id, pobre)
+
+# Leer el template de submission (opcional si necesitas mantener un formato específico)
+template <- read.csv("C:/Users/Marto/Documents/big data/sample_submission.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+name <- paste0("Xgboost_trees", ".csv")
+write.csv(predictSample, name, row.names = FALSE)
