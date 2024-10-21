@@ -4,7 +4,10 @@ p_load(rio, # import/export data
        glmnet, # To implement regularization algorithms. 
        caret, # creating predictive models
        stargazer,
-       ranger
+       ranger,
+       modeldata,
+       xgboost,
+       gbm
 )
 rm(list = ls())
 
