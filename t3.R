@@ -519,3 +519,50 @@ train <- train %>%
 dist_min_esttest <- apply(dist_matrixtestest, 1, min)
 test <- test %>%
   mutate(dis_estacion = dist_min_esttest)
+
+                       # Distancia a centros comerciales -----------------------------------------
+
+#Cargamos los datos de centros comerciales 
+
+centros_comerciales_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "shop", value = "mall")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+centro_comercial_sf <- osmdata_sf(centros_comerciales_osm)
+
+# De las features del parque nos interesa su geometría y donde están ubicados 
+
+centro_comercial_geometria <- centro_comercial_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name)
+head(centro_comercial_geometria)
+
+# Guardemos los polígonos de los centros comerciales 
+centro_comercial_geometria <- st_as_sf(centro_comercial_sf$osm_polygons)
+
+# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto 
+
+centroides_centro_comercial <- st_centroid(centro_comercial_geometria, byid = T)
+
+centroides_centro_comercial <- centroides_centro_comercial %>%
+  mutate(x=st_coordinates(centroides_centro_comercial)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_centro_comercial)[, "Y"]) 
+
+centroides_sf_centro_comercial <- st_as_sf(centroides_centro_comercial, coords = c("x", "y"), crs=4326)
+
+dist_matrixtraincc <- st_distance(x = sf_train, y = centroides_sf_centro_comercial)
+dim(dist_matrixtraincc)
+
+dist_matrixtestcc <- st_distance(x = sf_test, y = centroides_sf_centro_comercial)
+dim(dist_matrixtestcc)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_cctrain <- apply(dist_matrixtraincc, 1, min)  
+train <- train %>%
+  mutate(dis_cc=dist_min_cctrain)
+
+
+dist_min_cctest <- apply(dist_matrixtestcc, 1, min)  
+test <- test %>%
+  mutate(dis_cc=dist_min_cctest)
