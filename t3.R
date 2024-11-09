@@ -272,3 +272,250 @@ available_tags("leisure")
 parques <- opq(bbox = getbb("Bogotá Colombia")) %>%
   add_osm_feature(key = "leisure", value = "park")
 
+# Cambiamos el formato para que sea un objeto sf (simple features)
+parques_sf <- osmdata_sf(parques)
+
+# De las features del parque nos interesa su geometría y donde están ubicados 
+parques_geometria <- parques_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+
+# Guardemos los polígonos de los parques 
+parques_geometria <- st_as_sf(parques_sf$osm_polygons)
+
+# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto 
+centroides <- st_centroid(parques_geometria, byid = T)
+
+centroides <- centroides %>%
+  mutate(x=st_coordinates(centroides)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = parques_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = parques_geometria$name) %>%
+  addCircles(lng = centroides$x, 
+             lat = centroides$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf <- st_as_sf(centroides, coords = c("x", "y"), crs=4326)
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+# Distancia a los parques  ------------------------------------------------
+
+
+dist_matrixtrain <- st_distance(x = sf_train, y = centroides_sf)
+dim(dist_matrixtrain)
+
+dist_matrixtest <- st_distance(x = sf_test, y = centroides_sf)
+dim(dist_matrixtest)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_parquetrain <- apply(dist_matrixtrain, 1, min)  
+train <- train %>%
+  mutate(dis_parque=dist_min_parquetrain)
+
+
+dist_min_parquetest <- apply(dist_matrixtest, 1, min)  
+test <- test %>%
+  mutate(dis_parque=dist_min_parquetest)
+
+# Consideremos si el tamaño del parque influye en el precio 
+
+posicion_train <- apply(dist_matrixtrain, 1, function(x) which(min(x) == x))
+posicion_test <- apply(dist_matrixtest, 1, function(x) which(min(x) == x))
+
+# De la geometría de los parques extraemos el área
+
+areas <- st_area(parques_geometria)
+
+# Agregamos la variable  a la basa de datos 
+
+train  <- train %>%
+  mutate(area_parque = as.numeric(areas[posicion_train]))
+test  <- test %>%
+  mutate(area_parque = as.numeric(areas[posicion_test]))
+
+# Distancia a restaurantes  -----------------------------------------------
+
+# Cargar los datos de los restaurantes 
+
+restaurantes <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "restaurant")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+restaurantes_sf <- osmdata_sf(restaurantes)
+
+# De las features de los restaurantes nos interesa su geometría y donde están ubicados 
+
+restaurantes_geometria <- restaurantes_sf$osm_points %>% 
+  dplyr::select(osm_id, name) 
+
+# Dado que OSM trata a los restaurantes como puntos podemos calcular la distancia  sin calcular el centroide 
+
+dist_matrixtrainrest <- st_distance( x=sf_train,y=restaurantes_geometria)
+dim(dist_matrixtrainrest)
+
+dist_matrixtestrest <- st_distance(x=sf_test,y=restaurantes_geometria)
+dim(dist_matrixtestrest)
+
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_restrain <- apply(dist_matrixtrain, 1, min)  
+train <- train %>%
+  mutate(dis_rest=dist_min_restrain)
+
+
+dist_min_restest <- apply(dist_matrixtest, 1, min)  
+test <- test %>%
+  mutate(dis_rest=dist_min_restest)
+
+
+# Distancia al centro de bogota  ------------------------------------------
+
+#Vamos a aproximarnos al centro como la  plaza de bolivar 
+
+plaza_bolivar_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "name", value = "Plaza de Bolívar") 
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+centro_sf <- osmdata_sf(plaza_bolivar_osm)
+
+# De las features de los restaurantes nos interesa su geometría y donde están ubicados 
+
+centro_geometria <- centro_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+
+#Calculamos el centroide para  calcular la distnacia 
+
+centroides_centro <- st_centroid(centro_geometria, byid = T)
+
+centroides_centro <- centroides_centro %>%
+  mutate(x=st_coordinates(centroides_centro)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_centro)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = centro_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = centro_geometria$name) %>%
+  addCircles(lng = centroides_centro$x, 
+             lat = centroides_centro$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+# Definimos los centroides como datos espaciales
+
+centroides_centro_sf <- st_as_sf(centroides_centro, coords = c("x", "y"), crs=4326)
+
+# Calculamos la distancia desde cada propiedad a la Plaza de Bolívar
+
+dist_matrixtrainplaza <- st_distance(x=sf_train, y=centroides_centro_sf)
+dim(dist_matrixtrainplaza)
+
+dist_matrixtestplaza <- st_distance(x=sf_test, y=centroides_centro_sf)
+dim(dist_matrixtestplaza)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_centrotrain <- apply(dist_matrixtrainplaza, 1, min)  
+train <- train %>%
+  mutate(dis_centro=dist_min_centrotrain)
+
+
+dist_min_centrotest <- apply(dist_matrixtestplaza, 1, min)  
+test <- test %>%
+  mutate(dis_centro=dist_min_centrotest)
+
+
+# Distancia aeropuerto  ---------------------------------------------------
+
+# Cargamos de OSM la ubicación del aeropuerto el dorado 
+
+aeropuerto_osm <- opq(bbox = getbb("Bogotá, Colombia")) %>%
+  add_osm_feature(key = "aeroway", value = "terminal") %>%
+  add_osm_feature(key = "name", value = "Aeropuerto El Dorado")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+dorado_sf <- osmdata_sf(aeropuerto_osm)
+
+# De las features de los restaurantes nos interesa su geometría y donde están ubicados 
+
+dorado_geometria <- dorado_sf$osm_polygons
+
+# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto
+
+centroides_dorado <- st_centroid(dorado_geometria, byid = T)
+
+centroides_dorado <- centroides_dorado %>%
+  mutate(x=st_coordinates(centroides_dorado)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_dorado)[, "Y"]) 
+
+centroides_dorado_sf <- st_as_sf(centroides_dorado, coords = c("x", "y"), )
+
+# Calculamos la distancia desde cada propiedad al aeropuerto
+
+dist_matrixtraindorado <- st_distance(x=sf_train, y=centroides_dorado_sf)
+dim(dist_matrixtraindorado)
+
+dist_matrixtestdorado <- st_distance(x=sf_test, y=centroides_dorado_sf)
+dim(dist_matrixtestdorado)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_doradotrain <- apply(dist_matrixtraindorado, 1, min)  
+train <- train %>%
+  mutate(dis_dorado=dist_min_doradotrain)
+
+
+dist_min_doradotest <- apply(dist_matrixtestdorado, 1, min)  
+test <- test %>%
+  mutate(dis_centro=dist_min_doradotest)
+
+
+# Distancia a estaciones de transmilenio  ---------------------------------
+
+#Cargamos las bus stop que aparecen en osm
+
+estaciones_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "highway", value = "bus_stop")
+
+# Cambiamos el formato para que sea un objeto sf
+
+estaciones_sf <- osmdata_sf(estaciones_osm)
+
+# Extraemos las geometrías de las estaciones de TransMilenio
+
+estaciones_geometria <- estaciones_sf$osm_points
+
+# Convertimos estaciones_geometria a sf con el CRS adecuado, si es necesario
+
+estaciones_geometria <- st_as_sf(estaciones_geometria, crs = 4326)
+
+# Calculamos la distancia desde cada propiedad a las estaciones
+
+dist_matrixtrainest <- st_distance(x = sf_train, y = estaciones_geometria)
+dim(dist_matrixtrainest)
+
+dist_matrixtestest <- st_distance(x = sf_test, y = estaciones_geometria)
+dim(dist_matrixtestest)
+
+# Calculamos la distancia mínima a cada propiedad 
+
+dist_min_esttrain <- apply(dist_matrixtrainest, 1, min)
+train <- train %>%
+  mutate(dis_estacion = dist_min_esttrain)
+
+dist_min_esttest <- apply(dist_matrixtestest, 1, min)
+test <- test %>%
+  mutate(dis_estacion = dist_min_esttest)
