@@ -201,5 +201,74 @@ test <- test %>%
 
 stargazer(train,type="text")
 stargazer(test,type="text")
+# primera vizualización ---------------------------------------------------
 
+# Observamos la primera visualización
+leaflet() %>%
+  addTiles() %>%
+  addCircles(lng = train$lon, 
+             lat = train$lat)
+train <- train %>%
+  mutate(color = case_when(property_type == "Apartamento" ~ "#2A5D8F",
+                           property_type == "Casa" ~ "#3FB260"))
+# Encontramos el queremos que sea el centro del mapa 
+latitud_central <- mean(train$lat)
+longitud_central <- mean(train$lon)
+
+# Creamos el plot
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addCircles(lng = train$lon, 
+             lat = train$lat, 
+             col = train$color,
+             fillOpacity = 1,
+             opacity = 1,
+             popup = html)
+
+# Crear precio por m2 -----------------------------------------------------
+
+train<-train %>%
+  mutate(precio_por_m2= round(price/surface_total,0)) %>%
+  mutate(precio_por_m2=precio_por_m2/1000000)
+
+test<-test %>%
+  mutate(precio_por_m2= round(price/surface_total,0)) %>%
+  mutate(precio_por_m2=precio_por_m2/1000000)
+
+# Usando ggplot -----------------------------------------------------------
+
+bog <- st_read(dsn = 'C:/Users/Marto/Documents/big data/t3/Loca.shx')
+#Asignar CRS
+bog <- st_set_crs(bog, 4326)
+localidades<-st_transform(bog,4626)
+#grafico  de Bogota 
+ggplot()+
+  geom_sf(data=localidades, color = "black")
+#transformamos los datos a geografico
+sf_train <- st_as_sf(train, coords = c("lon", "lat"), crs=4626)
+#Realizamos un grafico por precio de mt2 para apartamentos
+ggplot()+
+  geom_sf(data=localidades, color = "black") + 
+  geom_sf(data=sf_train%>% filter(property_type== "Apartamento"),aes(color = precio_por_m2) ,shape=15, size=0.3)+
+  theme_bw()
+#Note que no tenemos  datos ni para sumapaz y para usme 
+
+localidades_filtradas <- localidades[-c(9,14), ]
+ggplot()+
+  geom_sf(data=localidades_filtradas, color = "black")
+ggplot()+
+  geom_sf(data=localidades_filtradas, color = "black") + 
+  geom_sf(data=sf_train%>% filter(property_type== "Apartamento"),aes(color = precio_por_m2) ,shape=15, size=0.3)+
+  theme_bw()
+
+
+# Datos espaciales --------------------------------------------------------
+
+#Datos geoespaciales disponibles
+
+available_tags("leisure")
+
+parques <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "leisure", value = "park")
 
