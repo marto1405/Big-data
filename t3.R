@@ -570,6 +570,248 @@ dist_min_cctest <- apply(dist_matrixtestcc, 1, min)
 test <- test %>%
   mutate(dis_cc=dist_min_cctest)
 
+# Distancia a hospitales  -------------------------------------------------
+
+#Cargamos los datos de hospitales
+
+hospitales_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "hospital")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+hospitales_sf <- osmdata_sf(hospitales_osm)
+
+# De las features de hospitales nos interesa su geometría y donde están ubicados 
+
+hospitales_geometria <- hospitales_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name)
+head(hospitales_geometria)
+
+# Guardemos los polígonos de los hospitales
+
+hospitales_geometria <- st_as_sf(hospitales_sf$osm_polygons)
+
+# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto 
+
+centroides_hospitales <- st_centroid(hospitales_geometria, byid = T)
+
+centroides_hospitales <- centroides_hospitales %>%
+  mutate(x=st_coordinates(centroides_hospitales)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_hospitales)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = hospitales_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = hospitales_geometria$name) %>%
+  addCircles(lng = centroides_hospitales$x, 
+             lat = centroides_hospitales$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf_hospitales <- st_as_sf(centroides_hospitales, coords = c("x", "y"), crs=4326)
+
+dist_matrixtrainhosp <- st_distance(x = sf_train, y = centroides_sf_hospitales)
+dim(dist_matrixtrainhosp)
+
+dist_matrixtesthosp <- st_distance(x = sf_test, y = centroides_sf_hospitales)
+dim(dist_matrixtesthosp)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_hosptrain <- apply(dist_matrixtrainhosp, 1, min)  
+train <- train %>%
+  mutate(dis_hosp=dist_min_hosptrain)
+
+dist_min_hosptest <- apply(dist_matrixtesthosp, 1, min)  
+test <- test %>%
+  mutate(dis_hosp=dist_min_hosptest)
+
+
+# Distancia a colegios -----------------------------------------
+
+#Cargamos los datos de colegios
+
+col_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "school")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+col_sf <- osmdata_sf(col_osm)
+
+# De las features de los colegios nos interesa su geometría y donde están ubicados 
+
+col_geometria <-col_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name) %>%
+  dplyr::filter(!str_detect(name, "Distrital"))
+head(col_geometria)
+
+# Guardemos los polígonos de los colegios
+
+col_geometria <- st_as_sf(col_sf$osm_polygons)
+
+# Calculamos el centroide de cada colegio para aproximar su ubicación como un solo punto 
+
+centroides_col <- st_centroid(col_geometria, byid = T)
+
+centroides_col <- centroides_col %>%
+  mutate(x=st_coordinates(centroides_col)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_col)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = col_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = col_geometria$name) %>%
+  addCircles(lng = centroides_col$x, 
+             lat = centroides_col$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf_col <- st_as_sf(centroides_col, coords = c("x", "y"), crs=4326)
+
+dist_matrixtraincol <- st_distance(x = sf_train, y = centroides_sf_col)
+dim(dist_matrixtraincol)
+
+dist_matrixtestcol <- st_distance(x = sf_test, y = centroides_sf_col)
+dim(dist_matrixtestcol)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_coltrain <- apply(dist_matrixtraincol, 1, min)  
+train <- train %>%
+  mutate(dis_col=dist_min_coltrain)
+
+dist_min_coltest <- apply(dist_matrixtestcol, 1, min)  
+test <- test %>%
+  mutate(dis_col=dist_min_coltest)
+
+
+# Distancia a universidades -----------------------------------------------
+
+#Cargamos los datos de universidades
+
+uni_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "university")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+uni_sf <- osmdata_sf(uni_osm)
+
+# De las features de las universidades nos interesa su geometría y donde están ubicados 
+
+uni_geometria <-uni_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+  
+head(uni_geometria)
+
+# Guardemos los polígonos de los colegios
+
+uni_geometria <- st_as_sf(uni_sf$osm_polygons)
+
+# Calculamos el centroide de cada universidad para aproximar su ubicación como un solo punto 
+
+centroides_uni <- st_centroid(uni_geometria, byid = T)
+
+centroides_uni <- centroides_uni %>%
+  mutate(x=st_coordinates(centroides_uni)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_uni)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = uni_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = uni_geometria$name) %>%
+  addCircles(lng = centroides_uni$x, 
+             lat = centroides_uni$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf_uni <- st_as_sf(centroides_uni, coords = c("x", "y"), crs=4326)
+
+dist_matrixtrainuni <- st_distance(x = sf_train, y = centroides_sf_uni)
+dim(dist_matrixtrainuni)
+
+dist_matrixtestuni <- st_distance(x = sf_test, y = centroides_sf_uni)
+dim(dist_matrixtestuni)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_unitrain <- apply(dist_matrixtrainuni, 1, min)  
+train <- train %>%
+  mutate(dis_uni=dist_min_unitrain)
+
+dist_min_unitest <- apply(dist_matrixtestuni, 1, min)  
+test <- test %>%
+  mutate(dis_uni=dist_min_unitest)
+
+
+# Distancia a  estacion de policia  ---------------------------------------
+
+#Cargamos los datos de  estaciones de Policia
+
+pol_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "police")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+pol_sf <- osmdata_sf(pol_osm)
+
+# De las features de las estaciones de policia nos interesa su geometría y donde están ubicados 
+
+pol_geometria <-pol_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name) 
+
+head(pol_geometria)
+
+# Guardemos los polígonos de las estaciones de policia
+
+pol_geometria <- st_as_sf(pol_sf$osm_polygons)
+
+# Calculamos el centroide de cada universidad para aproximar su ubicación como un solo punto 
+
+centroides_pol <- st_centroid(pol_geometria, byid = T)
+
+centroides_pol <- centroides_pol %>%
+  mutate(x=st_coordinates(centroides_pol)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_pol)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = pol_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = pol_geometria$name) %>%
+  addCircles(lng = centroides_pol$x, 
+             lat = centroides_pol$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf_pol <- st_as_sf(centroides_pol, coords = c("x", "y"), crs=4326)
+
+dist_matrixtrainpol <- st_distance(x = sf_train, y = centroides_sf_pol)
+dim(dist_matrixtrainpol)
+
+dist_matrixtestpol <- st_distance(x = sf_test, y = centroides_sf_pol)
+dim(dist_matrixtestpol)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_poltrain <- apply(dist_matrixtrainpol, 1, min)  
+train <- train %>%
+  mutate(dis_pol=dist_min_poltrain)
+
+dist_min_poltest <- apply(dist_matrixtestpol, 1, min)  
+test <- test %>%
+  mutate(dis_pol=dist_min_poltest)
+
 # Texto como datos ---------------------------------------------------------
  
 # Homogenizamos el texto 
