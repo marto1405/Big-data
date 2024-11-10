@@ -226,16 +226,6 @@ leaflet() %>%
              opacity = 1,
              popup = html)
 
-# Crear precio por m2 -----------------------------------------------------
-
-train<-train %>%
-  mutate(precio_por_m2= round(price/surface_total,0)) %>%
-  mutate(precio_por_m2=precio_por_m2/1000000)
-
-test<-test %>%
-  mutate(precio_por_m2= round(price/surface_total,0)) %>%
-  mutate(precio_por_m2=precio_por_m2/1000000)
-
 # Usando ggplot -----------------------------------------------------------
 
 bog <- st_read(dsn = 'C:/Users/Marto/Documents/big data/t3/Loca.shx')
@@ -247,19 +237,32 @@ ggplot()+
   geom_sf(data=localidades, color = "black")
 #transformamos los datos a geografico
 sf_train <- st_as_sf(train, coords = c("lon", "lat"), crs=4626)
+sf_test <- st_as_sf(train, coords = c("lon", "lat"), crs=4626)
 #Realizamos un grafico por precio de mt2 para apartamentos
 ggplot()+
   geom_sf(data=localidades, color = "black") + 
-  geom_sf(data=sf_train%>% filter(property_type== "Apartamento"),aes(color = precio_por_m2) ,shape=15, size=0.3)+
+  geom_sf(data=sf_train,aes(color = precio_por_m2) ,shape=15, size=0.3)+
   theme_bw()
+
+ggplot()+
+  geom_sf(data=localidades, color = "black") + 
+  geom_sf(data=sf_test,aes(color = precio_por_m2) ,shape=15, size=0.3)+
+  theme_bw()
+
 #Note que no tenemos  datos ni para sumapaz y para usme 
 
 localidades_filtradas <- localidades[-c(9,14), ]
 ggplot()+
   geom_sf(data=localidades_filtradas, color = "black")
+
 ggplot()+
   geom_sf(data=localidades_filtradas, color = "black") + 
-  geom_sf(data=sf_train%>% filter(property_type== "Apartamento"),aes(color = precio_por_m2) ,shape=15, size=0.3)+
+  geom_sf(data=sf_train,aes(color = precio_por_m2) ,shape=15, size=0.3)+
+  theme_bw()
+
+ggplot()+
+  geom_sf(data=localidades_filtradas, color = "black") + 
+  geom_sf(data=sf_test,aes(color = precio_por_m2) ,shape=15, size=0.3)+
   theme_bw()
 
 
