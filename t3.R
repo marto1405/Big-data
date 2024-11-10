@@ -566,3 +566,128 @@ train <- train %>%
 dist_min_cctest <- apply(dist_matrixtestcc, 1, min)  
 test <- test %>%
   mutate(dis_cc=dist_min_cctest)
+
+# Texto como datos ---------------------------------------------------------
+ 
+# Homogenizamos el texto 
+
+# Pasamos toda la descripcion a minuscula 
+
+train <- train %>%
+  mutate(description = str_to_lower(description))
+
+test <- test %>%
+  mutate(description = str_to_lower(description))
+
+# Eliminamos las tíldes 
+
+train <- train %>%
+  mutate(description = iconv(description, from = "UTF-8", to = "ASCII//TRANSLIT"))
+
+test <- test %>%
+  mutate(description = iconv(description, from = "UTF-8", to = "ASCII//TRANSLIT"))
+
+# Eliminamos carcateres especiales 
+
+train <- train %>%
+  mutate(description = str_replace_all(description, "[^[:alnum:]]", " "))
+
+test <- test %>%
+  mutate(description = str_replace_all(description, "[^[:alnum:]]", " "))
+
+# Eliminamos espacios extra 
+
+train <- train %>%
+  mutate(description = str_trim(gsub("\\s+", " ", description)))
+
+test <- test %>%
+  mutate(description = str_trim(gsub("\\s+", " ", description)))
+
+
+# Número de pisos ---------------------------------------------------------
+
+train <- train %>%
+  mutate(n_pisosc= str_extract(description, "(\\w+|\\d+) (pisos|niveles)")) %>%
+  mutate(n_pisosc= ifelse(property_type=="Casa", n_pisosc, NA))
+
+test <- test %>%
+  mutate(n_pisosc= str_extract(description, "(\\w+|\\d+) (pisos|niveles)")) %>%
+  mutate(n_pisosc= ifelse(property_type=="Casa", n_pisosc, NA))
+
+train <- train %>%
+  mutate(n_pisos= str_extract(description, "duplex")) %>%
+  mutate(n_pisos= ifelse(property_type=="Apartamento", n_pisos, n_pisosc))
+
+test <- test %>%
+  mutate(n_pisos= str_extract(description, "duplex")) %>%
+  mutate(n_pisos= ifelse(property_type=="Apartamento", n_pisos,  n_pisosc))
+
+# Pasamos de letras a números 
+
+numeros_escritos <- c( "dos|duplex", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez")
+numeros_numericos <- as.character(2:10)
+
+train <- train %>%
+  mutate(n_pisos = str_replace_all(n_pisos, setNames(numeros_numericos,numeros_escritos)))
+
+test <- test %>%
+  mutate(n_pisos = str_replace_all(n_pisos, setNames(numeros_numericos,numeros_escritos)))
+
+train <- train %>%
+  mutate(n_pisos_numerico = as.integer(str_extract(n_pisos, "\\d+")))  %>%
+  mutate(n_pisos_numerico = if_else(is.na(n_pisos_numerico), 1, n_pisos_numerico)) %>%
+  mutate(n_pisos_numerico = if_else(n_pisos_numerico>10, 1, n_pisos_numerico)) %>%
+  select(-n_pisosc, -n_pisos)
+
+test <- test %>%
+  mutate(n_pisos_numerico = as.integer(str_extract(n_pisos, "\\d+")))  %>%
+  mutate(n_pisos_numerico = if_else(is.na(n_pisos_numerico), 1, n_pisos_numerico)) %>%
+  mutate(n_pisos_numerico = if_else(n_pisos_numerico>10, 1, n_pisos_numerico)) %>%
+  select(-n_pisosc, -n_pisos)
+
+# Ubicación del piso  -----------------------------------------------------
+
+
+train <- train %>%
+  mutate(piso_info= str_extract(description, "(\\w+|\\d+) piso (\\w+|\\d+)"))
+
+test <- test %>%
+  mutate(piso_info= str_extract(description, "(\\w+|\\d+) piso (\\w+|\\d+)"))
+
+numeros_escritos <- c("uno|primero|primer", "dos|segundo|segund", "tres|tercero|tercer", "cuatro|cuarto", "cinco|quinto", "seis|sexto", "siete|septimo|sptimo", "ocho|octavo", "nueve|noveno", "diez|decimo|dei", "undecimo|once|ultimo")
+numeros_numericos <- as.character(1:11)
+
+train <- train %>%
+  mutate(piso_info = str_replace_all(piso_info, setNames(numeros_numericos,numeros_escritos)))
+
+test <- test %>%
+  mutate(piso_info = str_replace_all(piso_info, setNames(numeros_numericos,numeros_escritos)))
+
+train <- train %>%
+  mutate(piso_numerico = as.integer(str_extract(piso_info, "\\d+")))
+
+test <- test %>%
+  mutate(piso_numerico = as.integer(str_extract(piso_info, "\\d+")))
+
+train <- train %>%
+  mutate(piso_numerico = ifelse(piso_numerico > 30, NA, piso_numerico)) %>%
+  mutate(piso_numerico = ifelse(property_type=="Casa", 1, piso_numerico))
+
+test <- test %>%
+  mutate(piso_numerico = ifelse(piso_numerico > 30, NA, piso_numerico)) %>%
+  mutate(piso_numerico = ifelse(property_type=="Casa", 1, piso_numerico))
+
+# En este caso vamos a imputar la media  a las NA
+
+mean_piso_train<- mean(train$piso_numerico, na.rm = TRUE)
+mean_piso_train
+mean_piso_test<- mean(test$piso_numerico, na.rm = TRUE)
+mean_piso_test
+
+train <- train %>%
+  mutate(piso_numerico = replace_na(piso_numerico, floor(mean_piso_train))) %>%
+  select(-piso_info)
+
+test <- test %>%
+  mutate(piso_numerico = replace_na(piso_numerico, floor(mean_piso_train))) %>%
+  select(-piso_info)
