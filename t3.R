@@ -540,7 +540,7 @@ head(centro_comercial_geometria)
 # Guardemos los polígonos de los centros comerciales 
 centro_comercial_geometria <- st_as_sf(centro_comercial_sf$osm_polygons)
 
-# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto 
+# Calculamos el centroide de cada centro comercial para aproximar su ubicación como un solo punto 
 
 centroides_centro_comercial <- st_centroid(centro_comercial_geometria, byid = T)
 
