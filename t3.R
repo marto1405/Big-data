@@ -1016,3 +1016,188 @@ head(template)
 
 name<- paste0("EN_lambda_", "0001", "_alpha_" , "15", ".csv")  
 write.csv(predictionsample,name, row.names = FALSE)
+
+# Distancia a  discotecas -------------------------------------------------
+
+#Cargamos los datos de discotecas
+
+disco_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "nightclub")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+disco_sf <- osmdata_sf(disco_osm)
+
+# De las features de discotecas nos interesa su geometría y donde están ubicados 
+
+disco_geometria <- disco_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name)
+head(disco_geometria)
+
+# Guardemos los polígonos de las discotecas
+
+disco_geometria <- st_as_sf(disco_sf$osm_polygons)
+
+# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto 
+
+centroides_disco <- st_centroid(disco_geometria, byid = T)
+
+centroides_disco <- centroides_disco %>%
+  mutate(x=st_coordinates(centroides_disco)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_disco)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = disco_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = disco_geometria$name) %>%
+  addCircles(lng = centroides_disco$x, 
+             lat = centroides_disco$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf_disco <- st_as_sf(centroides_disco, coords = c("x", "y"), crs=4326)
+
+dist_matrixtraindisco <- st_distance(x = sf_train, y = centroides_sf_disco)
+dim(dist_matrixtraindisco)
+
+dist_matrixtestdisco <- st_distance(x = sf_test, y = centroides_sf_disco)
+dim(dist_matrixtestdisco)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_discotrain <- apply(dist_matrixtraindisco, 1, min)  
+train <- train %>%
+  mutate(dis_disco=dist_min_discotrain)
+
+dist_min_discotest <- apply(dist_matrixtestdisco, 1, min)  
+test <- test %>%
+  mutate(dis_disco=dist_min_discotest)
+
+
+# Añadimos otra variable a partir de la descripcion  ----------------------
+
+# Homogenizamos el texto 
+
+# Pasamos toda la descripcion a minuscula 
+
+train <- train %>%
+  mutate(description = str_to_lower(description))
+
+test <- test %>%
+  mutate(description = str_to_lower(description))
+
+# Eliminamos las tíldes 
+
+train <- train %>%
+  mutate(description = iconv(description, from = "UTF-8", to = "ASCII//TRANSLIT"))
+
+test <- test %>%
+  mutate(description = iconv(description, from = "UTF-8", to = "ASCII//TRANSLIT"))
+
+# Eliminamos carcateres especiales 
+
+train <- train %>%
+  mutate(description = str_replace_all(description, "[^[:alnum:]]", " "))
+
+test <- test %>%
+  mutate(description = str_replace_all(description, "[^[:alnum:]]", " "))
+
+# Eliminamos espacios extra 
+
+train <- train %>%
+  mutate(description = str_trim(gsub("\\s+", " ", description)))
+
+test <- test %>%
+  mutate(description = str_trim(gsub("\\s+", " ", description)))
+
+# Estraemos informacion si la propiedad tiene terraza
+
+train <- train %>%
+  mutate(terraza= str_extract(description, "\\b(terraza|balcon)\\b"))
+
+test <- test %>%
+  mutate(terraza= str_extract(description, "\\b(terraza|balcon)\\b"))
+
+# Creamos una variable dummy que toma el valor de 1 si hay terraza y 0 de lo contrario 
+
+train <- train %>%
+  mutate(terraza= if_else(!is.na(terraza), 1, 0))
+
+test <- test %>%
+  mutate(terraza= if_else(!is.na(terraza), 1, 0))
+
+# Tiene  garaje  ----------------------------------------------------------
+
+train <- train %>%
+  mutate(garaje= str_extract(description, "\\b(garaje|garajes|parqueadero|parqueaderos|parqueo)\\b"))
+
+test <- test %>%
+  mutate(garaje= str_extract(description, "\\b(garaje|garajes|parqueadero|parqueaderos|parqueo)\\b"))
+
+# Creamos una variable dummy que toma el valor de 1 si hay terraza y 0 de lo contrario 
+
+train <- train %>%
+  mutate(garaje = if_else(!is.na(garaje), 1, 0))
+
+test <- test %>%
+  mutate(garaje = if_else(!is.na(garaje), 1, 0))
+
+# Capacidad garaje --------------------------------------------------------
+
+# Eliminar la palabra "para" de la descripción en train y test
+
+train <- train %>%
+  mutate(description = str_replace_all(description, "\\bpara\\b", ""))
+
+test <- test %>%
+  mutate(description = str_replace_all(description, "\\bpara\\b", ""))
+
+# Extraer datos del garaje o parqueadero
+
+train <- train %>%
+  mutate(cap_garaje= str_extract(description, "(\\w+|\\d+)?\\s*\\b(garaje|garajes|parqueadero|parqueaderos|parqueo|parquedero)\\b\\s*(\\w+|\\d+)?"))
+
+test <- test %>%
+  mutate(cap_garaje= str_extract(description, "(\\w+|\\d+)?\\s*\\b(garaje|garajes|parqueadero|parqueaderos|parqueo|parquedero)\\b\\s*(\\w+|\\d+)?"))
+
+# Pasamos de letras a números 
+
+numeros_escritos <- c("uno|primero|primer", "doble|dos", "tres", "cuatro", "cinco")
+numeros_numericos <- as.character(1:5)
+
+train <- train %>%
+  mutate(cap_garaje_info = str_replace_all(cap_garaje, setNames(numeros_numericos,numeros_escritos)))
+
+test <- test %>%
+  mutate(cap_garaje_info = str_replace_all(cap_garaje, setNames(numeros_numericos,numeros_escritos)))
+
+# Extraemos el valor númerico de la capacidad 
+
+train <- train %>%
+  mutate(capgaraje = as.integer(str_extract(cap_garaje_info, "\\d+"))) %>%
+  mutate(capgaraje = if_else(is.na(capgaraje_numerico), if_else(garaje== 1, 1, 0), capgaraje_numerico )) %>%
+  select(-cap_garaje_info,-cap_garaje,-capgaraje_numerico)
+
+test <- test %>%
+  mutate(capgaraje = as.integer(str_extract(cap_garaje_info, "\\d+"))) %>%
+  mutate(capgaraje = if_else(is.na(capgaraje_numerico), if_else(garaje== 1, 1, 0), capgaraje_numerico )) %>%
+  select(-cap_garaje_info,-cap_garaje,-capgaraje_numerico)
+
+# Deposito o bodega -------------------------------------------------------
+
+train <- train %>%
+  mutate(deposito= str_extract(description, "\\b(deposito|bodega)\\b"))
+
+test <- test %>%
+  mutate(deposito= str_extract(description, "\\b(deposito|bodega)\\b"))
+
+# Creamos una variable dummy que toma el valor de 1 si hay terraza y 0 de lo contrario 
+
+train <- train %>%
+  mutate(deposito = if_else(!is.na(deposito), 1, 0))
+
+test <- test %>%
+  mutate(deposito = if_else(!is.na(deposito), 1, 0))
