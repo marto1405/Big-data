@@ -1201,3 +1201,82 @@ train <- train %>%
 
 test <- test %>%
   mutate(deposito = if_else(!is.na(deposito), 1, 0))
+
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+
+elastic_net_spec <- linear_reg(penalty = tune(), mixture = tune()) %>%
+  set_engine("glmnet")
+
+# Definimos la grilla de párametrospenalty
+
+grid_values <- grid_regular(penalty(range = c(-3, 3)), levels = 50) %>%
+  expand_grid(mixture = seq(0, 1, by = 0.05))
+
+set.seed(86936)
+db_fold <- vfold_cv(train, v = 10)
+
+# Definimos la segunda receta 
+
+rec_2 <- recipe(price ~ dis_parque + area_parque + dis_rest + dis_centro + dis_estacion + dis_cc + dis_hosp + dis_col + dis_uni + dis_pol + dis_disco + rooms + bathrooms + bedrooms + property_type + piso_numerico+ n_pisos_numerico + garaje + capgaraje + deposito + terraza, data = train) %>%
+  step_interact(terms = ~ dis_centro:property_type + dis_col:property_type + dis_rest:property_type + dis_cc:property_type + dis_hosp:property_type + dis_disco:property_type  ) %>% # creamos interacciones con el tipo de propiedad
+  step_interact(terms = ~ dis_cc:piso_numerico + dis_col:piso_numerico + dis_centro:piso_numerico + dis_disco:property_type + dis_hosp:piso_numerico  ) %>% # Crea interacción con el piso donde se encuentra el apto. 
+  step_interact(terms = ~ dis_cc:garaje + dis_col:garaje + dis_centro:garaje + dis_disco:garaje + dis_hosp:garaje )  %>% #Creamos iterraciones con garaje
+  step_interact(terms = ~ dis_cc:terraza + dis_col:terraza + dis_centro:terraza + dis_disco:terraza + dis_hosp:terraza )  %>%  #Creamos iteracciones con si tiene terraza
+  step_novel(all_nominal_predictors()) %>%   # para las clases no antes vistas en el train. 
+  step_dummy(all_nominal_predictors()) %>%  # crea dummies para las variables categóricas
+  step_zv(all_predictors()) %>%   #  elimina predictores con varianza cero (constantes)
+  step_normalize(all_predictors())  # normaliza los predictores.
+
+# Definimos  flujo de trabajo
+
+workflow_2 <- workflow() %>% 
+  # Agregar la receta de pre-procesamiento de datos. En este caso la receta 1
+  add_recipe(rec_2) %>%
+  # Agregar la especificación del modelo de regresión Elastic Net
+  add_model(elastic_net_spec)
+
+# Entrenamiento de hiperparametros 
+
+set.seed(200447)
+
+tune_res2 <- tune_grid(
+  workflow_2,         # El flujo de trabajo que contiene: receta y especificación del modelo
+  resamples = db_fold,  # Folds de validación cruzada
+  grid = grid_values,        # Grilla de valores de penalización
+  metrics = metric_set(rmse)  # métrica
+)
+
+collect_metrics(tune_res2)
+
+best_penalty_2 <- select_best(tune_res2, metric = "rmse")
+best_penalty_2
+
+EN_final2 <- finalize_workflow(workflow_2, best_penalty_2)
+
+EN_final2_fit <- fit(EN_final2, data = train)
+
+predicciones <- predict(EN_final2_fit , new_data = test)
+
+# Combinar property_id con las predicciones
+
+predictionsample <- test %>%
+  select(property_id) %>%  # Seleccionar solo el property_id
+  mutate(price = predicciones $.pred)  # Añadir las predicciones como nueva columna
+
+head(predictionsample)
+
+# Aproximamos
+predictionsample <- predictionsample %>%
+  mutate(price=floor(price))
+
+# Leer el archivo de template para asegurar el formato de salida
+
+template <- read.csv("submission_template.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+
+name<- paste0("EN_lambda_", "0001", "_alpha_" , "35", ".csv")  
+write.csv(predictionsample,name, row.names = FALSE)
