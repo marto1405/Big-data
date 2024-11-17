@@ -1178,13 +1178,13 @@ test <- test %>%
 
 train <- train %>%
   mutate(capgaraje = as.integer(str_extract(cap_garaje_info, "\\d+"))) %>%
-  mutate(capgaraje = if_else(is.na(capgaraje_numerico), if_else(garaje== 1, 1, 0), capgaraje_numerico )) %>%
-  select(-cap_garaje_info,-cap_garaje,-capgaraje_numerico)
+  mutate(capgaraje = if_else(is.na(capgaraje) & garaje == 1, 1,if_else(is.na(capgaraje), 0, capgaraje))) %>%
+  select(-cap_garaje_info,-cap_garaje)
 
 test <- test %>%
   mutate(capgaraje = as.integer(str_extract(cap_garaje_info, "\\d+"))) %>%
-  mutate(capgaraje = if_else(is.na(capgaraje_numerico), if_else(garaje== 1, 1, 0), capgaraje_numerico )) %>%
-  select(-cap_garaje_info,-cap_garaje,-capgaraje_numerico)
+  mutate(capgaraje = if_else(is.na(capgaraje) & garaje == 1, 1,if_else(is.na(capgaraje), 0, capgaraje))) %>%
+  select(-cap_garaje_info,-cap_garaje)
 
 # Deposito o bodega -------------------------------------------------------
 
