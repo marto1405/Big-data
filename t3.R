@@ -1361,3 +1361,627 @@ head(template)
 
 name<- paste0("EN_lambda_", "0001", "_alpha_" , "95", ".csv")  
 write.csv(predictionsample,name, row.names = FALSE)
+# Random forest receta 1 -----------------------------------------------------------
+
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+random_forest<- rand_forest(
+  mtry = tune(),     # Número de predictores seleccionados aleatoriamente
+  trees = 500,      # Número de árboles
+  min_n = tune()     # Número mínimo de observaciones por hoja
+) %>%
+  set_engine("ranger", max.depth = 10) %>%  # Motor para Random Forest limitando la profundidad
+  set_mode("regression")    # Usamos regresión para el precio
+
+# Definimos la grilla de párametrospenalty
+set.seed(869362004)
+grid_values <- grid_random(
+  mtry(range = c(2, 12)),  # Ajusta mtry al 50% de los predictores para la receta 1 son un total de 23 predictore
+  min_n(range = c(5, 25)),   # Rango estándar para min_n
+  size = 20 )                # Número de combinaciones aleatorias
+
+set.seed(869362004)
+db_fold <- vfold_cv(train, v = 5)
+
+# Definimos  flujo de trabajo
+workflow_1 <- workflow() %>%
+  # El flujo de trabajo que contiene: receta y especificación del modelo
+  add_recipe(rec_1) %>%
+  # Agregar la especificación del modelo random forestpaa
+  add_model(random_forest)
+
+# Entrenamiento de hiperparametros 
+
+# Configurar paralelización
+
+num_cores <- parallel::detectCores() - 2  # Usa todos menos 2 núcleos
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Control de paralelización
+
+control_parallel <- control_resamples(
+  save_pred = TRUE, 
+  verbose = TRUE, 
+  parallel_over = "resamples"
+)
+
+set.seed(200447)
+
+handlers("txtprogressbar")  # Configurar barra de progreso en consola
+
+with_progress({
+  tune_res1 <- tune_grid(
+    workflow_1,         # Flujo de trabajo con receta y modelo
+    resamples = db_fold,  # Validación cruzada
+    grid = grid_values,   # Grilla de hiperparámetros
+    metrics = metric_set(mae),  # Métrica para evaluar
+    control = control_parallel
+  )
+})
+
+stopCluster(cl) # Finalizar paralelización
+registerDoSEQ()  # Restablecer el backend a secuencial
+
+collect_metrics(tune_res1)
+
+best_rf1 <- select_best(tune_res1, metric = "mae")
+best_rf1
+
+rf_final1 <- finalize_workflow(workflow_1, best_rf1)
+
+rf_final1_fit <- fit(rf_final1, data = train)
+
+predicciones <- predict(rf_final1_fit , new_data = test)
+
+# Combinar property_id con las predicciones
+
+predictionsample <- test %>%
+  select(property_id) %>%  # Seleccionar solo el property_id
+  mutate(price = predicciones $.pred)  # Añadir las predicciones como nueva columna
+
+head(predictionsample)
+
+# Aproximamos
+predictionsample <- predictionsample %>%
+  mutate(price=floor(price))
+
+# Leer el archivo de template para asegurar el formato de salida
+
+template <- read.csv("submission_template.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+
+name<- paste0("Random_forest", ".csv")  
+write.csv(predictionsample,name, row.names = FALSE)
+
+# Distancia a bancos ------------------------------------------------------
+
+#Cargamos los datos de bancos
+
+banco_osm <- opq(bbox = getbb("Bogotá Colombia")) %>%
+  add_osm_feature(key = "amenity", value = "bank")
+
+# Cambiamos el formato para que sea un objeto sf (simple features)
+
+banco_sf <- osmdata_sf(banco_osm)
+
+# De las features de bancos nos interesa su geometría y donde están ubicados 
+
+banco_geometria <- banco_sf$osm_polygons %>% 
+  dplyr::select(osm_id, name)
+head(banco_geometria)
+
+# Guardemos los polígonos de los bancos
+
+banco_geometria <- st_as_sf(banco_sf$osm_polygons)
+
+# Calculamos el centroide de cada parque para aproximar su ubicación como un solo punto 
+
+centroides_banco <- st_centroid(banco_geometria, byid = T)
+
+centroides_banco <- centroides_banco %>%
+  mutate(x=st_coordinates(centroides_banco)[, "X"]) %>%
+  mutate(y=st_coordinates(centroides_banco)[, "Y"]) 
+
+# Visualizando en un mapa 
+
+leaflet() %>%
+  addTiles() %>%
+  setView(lng = longitud_central, lat = latitud_central, zoom = 12) %>%
+  addPolygons(data = banco_geometria, col = "red",weight = 10,
+              opacity = 0.8, popup = banco_geometria$name) %>%
+  addCircles(lng = centroides_banco$x, 
+             lat = centroides_banco$y, 
+             col = "darkblue", opacity = 0.5, radius = 1)
+
+
+centroides_sf_banco <- st_as_sf(centroides_banco, coords = c("x", "y"), crs=4326)
+
+dist_matrixtrainbanco <- st_distance(x = sf_train, y = centroides_sf_banco)
+dim(dist_matrixtrainbanco)
+
+dist_matrixtestbanco <- st_distance(x = sf_test, y = centroides_sf_banco)
+dim(dist_matrixtestbanco)
+
+# Calculamos la distancia minima a cada propiedad
+
+dist_min_bancotrain <- apply(dist_matrixtrainbanco, 1, min)  
+train <- train %>%
+  mutate(dis_banco=dist_min_bancotrain)
+
+dist_min_bancotest <- apply(dist_matrixtestbanco, 1, min)  
+test <- test %>%
+  mutate(dis_banco=dist_min_bancotest)
+
+
+# gym ---------------------------------------------------------------------
+
+# Identificar si "gimnasio" aparece en la descripción
+train <- train %>%
+  mutate(gym = str_extract(description, "\\b(gimnasio)\\b"))
+
+test <- test %>%
+  mutate(gym = str_extract(description,  "\\b(gimnasio)\\b"))
+
+# Crear una variable dummy que tome el valor de 1 si existe "gimnasio" y 0 de lo contrario
+train <- train %>%
+  mutate(gym = if_else(!is.na(gym), 1, 0))
+
+test <- test %>%
+  mutate(gym = if_else(!is.na(gym), 1, 0))
+
+# Salon comunal -----------------------------------------------------------
+
+# Identificar si "salón social" aparece en la descripción
+
+train <- train %>%
+  mutate(salon_social = str_extract(description, "\\b(salon social | saln social | saln comunal | salon comunal)\\b"))
+
+test <- test %>%
+  mutate(salon_social = str_extract(description, "\\b(salon social | saln social | saln comunal | salon comunal)\\b"))
+
+# Crear una variable dummy que tome el valor de 1 si existe "salón social" y 0 de lo contrario
+
+train <- train %>%
+  mutate(salon_social = if_else(!is.na(salon_social), 1, 0))
+
+test <- test %>%
+  mutate(salon_social = if_else(!is.na(salon_social), 1, 0))
+
+
+# Cancha ------------------------------------------------------------------
+
+
+# Identificar si "cancha" aparece en la descripción, note que en este caso considerammos cualquier tipo de cancha 
+
+train <- train %>%
+  mutate(cancha = str_extract(description, "\\b(cancha)\\b"))
+
+test <- test %>%
+  mutate(cancha = str_extract(description,  "\\b(cancha)\\b"))
+
+# Crear una variable dummy que tome el valor de 1 si existe "cancha" y 0 de lo contrario
+
+train <- train %>%
+  mutate(cancha = if_else(!is.na(cancha), 1, 0))
+
+test <- test %>%
+  mutate(cancha = if_else(!is.na(cancha), 1, 0))
+
+
+# Piscina -----------------------------------------------------------------
+
+# Identificar si "piscina" aparece en la descripción 
+
+train <- train %>%
+  mutate(piscina = str_extract(description, "\\b(piscina)\\b"))
+
+test <- test %>%
+  mutate(piscina = str_extract(description,  "\\b(piscina)\\b"))
+
+# Crear una variable dummy que tome el valor de 1 si existe "piscina" y 0 de lo contrario
+
+train <- train %>%
+  mutate(piscina = if_else(!is.na(piscina), 1, 0))
+
+test <- test %>%
+  mutate(piscina = if_else(!is.na(piscina), 1, 0))
+
+
+# Zona bbq ----------------------------------------------------------------
+
+# Identificar si "bbq" aparece en la descripción 
+
+train <- train %>%
+  mutate(bbq = str_extract(description, "\\b(bbq)\\b"))
+
+test <- test %>%
+  mutate(bbq = str_extract(description,  "\\b(bbq)\\b"))
+
+# Crear una variable dummy que tome el valor de 1 si existe "bbq" y 0 de lo contrario
+
+train <- train %>%
+  mutate(bbq = if_else(!is.na(bbq), 1, 0))
+
+test <- test %>%
+  mutate(bbq = if_else(!is.na(bbq), 1, 0))
+
+
+# acensor -----------------------------------------------------------------
+
+# Identificar si "acensor" aparece en la descripción 
+
+train <- train %>%
+  mutate(ascensor= str_extract(description, "\\b(ascensor | ascensores)\\b"))
+
+test <- test %>%
+  mutate(ascensor = str_extract(description,  "\\b(ascensor | ascensores)\\b"))
+
+# Crear una variable dummy que tome el valor de 1 si existe "ascensor" y 0 de lo contrario
+
+train <- train %>%
+  mutate(ascensor = if_else(!is.na(ascensor), 1, 0))
+
+test <- test %>%
+  mutate(ascensor = if_else(!is.na(ascensor), 1, 0))
+
+
+# Elastic net 5 -----------------------------------------------------------
+
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+
+elastic_net_spec <- linear_reg(penalty = tune(), mixture = tune()) %>%
+  set_engine("glmnet")
+
+# Definimos la grilla de párametrospenalty
+
+grid_values <- grid_regular(penalty(range = c(-3, 3)), levels = 50) %>%
+  expand_grid(mixture = seq(0, 1, by = 0.05))
+
+set.seed(8693645)
+db_fold <- vfold_cv(train, v = 10)
+
+# Definimos la quinta receta 
+
+rec_5 <- recipe(price ~ dis_parque + area_parque + dis_rest + dis_centro + dis_estacion + dis_cc + dis_hosp + dis_col + dis_uni + dis_pol + dis_disco + dis_banco + rooms + bathrooms + bedrooms + property_type + piso_numerico+ n_pisos_numerico + garaje + capgaraje + deposito + terraza + gym + salon_social + piscina + bbq + cancha + ascensor, data = train) %>%
+  step_interact(terms = ~ dis_parque:property_type + area_parque:property_type + dis_rest:property_type + dis_centro:property_type + dis_estacion:property_type + dis_cc:property_type + dis_hosp:property_type + dis_col:property_type + dis_uni:property_type + dis_pol:property_type + dis_disco:property_type + dis_banco:property_type + rooms:property_type + bathrooms:property_type + bedrooms:property_type + deposito:property_type + terraza:property_type + capgaraje:property_type + gym:property_type + salon_social:property_type + piscina:property_type + bbq:property_type + cancha:property_type + ascensor:property_type) %>% # creamos interacciones con el tipo de propiedad
+  step_interact(terms = ~ dis_parque:piso_numerico + dis_rest:piso_numerico + dis_centro:piso_numerico + dis_estacion:piso_numerico + dis_cc:piso_numerico + dis_hosp:piso_numerico + dis_col:piso_numerico + dis_uni:piso_numerico + dis_pol:piso_numerico + dis_disco:piso_numerico + dis_banco:piso_numerico) %>% # Crea interacción con el piso donde se encuentra el apto. 
+  step_interact(terms = ~ dis_rest:garaje  + dis_centro:garaje  + dis_estacion:garaje  + dis_cc:garaje  + dis_hosp:garaje  + dis_col:garaje  + dis_uni:garaje  + dis_pol:garaje  + dis_disco:garaje + dis_banco:garaje )  %>% #Creamos iterraciones con garaje
+  step_interact(terms = ~ dis_parque:terraza + dis_rest:terraza + dis_centro:terraza + dis_estacion:terraza + dis_cc:terraza + dis_hosp:terraza + dis_col:terraza + dis_uni:terraza + dis_pol:terraza + dis_disco:terraza + dis_banco:terraza )  %>%  #Creamos iteracciones con si tiene terraza
+  step_novel(all_nominal_predictors()) %>%   # para las clases no antes vistas en el train. 
+  step_dummy(all_nominal_predictors()) %>%  # crea dummies para las variables categóricas
+  step_zv(all_predictors()) %>%   #  elimina predictores con varianza cero (constantes)
+  step_normalize(all_predictors())  # normaliza los predictores.
+
+# Definimos  flujo de trabajo
+
+workflow_5 <- workflow() %>% 
+  # Agregar la receta de pre-procesamiento de datos. En este caso la receta 1
+  add_recipe(rec_5) %>%
+  # Agregar la especificación del modelo de regresión Elastic Net
+  add_model(elastic_net_spec)
+
+# Entrenamiento de hiperparametros 
+
+set.seed(200447)
+
+tune_res5 <- tune_grid(
+  workflow_5,         # El flujo de trabajo que contiene: receta y especificación del modelo
+  resamples = db_fold,  # Folds de validación cruzada
+  grid = grid_values,        # Grilla de valores de penalización
+  metrics = metric_set(mae)  # métrica
+)
+
+collect_metrics(tune_res5)
+
+best_penalty_5 <- select_best(tune_res5, metric = "mae")
+best_penalty_5
+
+EN_final5 <- finalize_workflow(workflow_5, best_penalty_5)
+
+EN_final5_fit <- fit(EN_final5, data = train)
+
+predicciones <- predict(EN_final5_fit , new_data = test)
+
+# Combinar property_id con las predicciones
+
+predictionsample <- test %>%
+  select(property_id) %>%  # Seleccionar solo el property_id
+  mutate(price = predicciones $.pred)  # Añadir las predicciones como nueva columna
+
+head(predictionsample)
+
+# Aproximamos
+predictionsample <- predictionsample %>%
+  mutate(price=floor(price))
+
+# Leer el archivo de template para asegurar el formato de salida
+
+template <- read.csv("submission_template.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+
+name<- paste0("EN_lambda_", "0001", "_alpha_" , "05", ".csv")  
+write.csv(predictionsample,name, row.names = FALSE)
+
+
+# Elastic Net 6 -----------------------------------------------------------
+
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+
+elastic_net_spec <- linear_reg(penalty = tune(), mixture = tune()) %>%
+  set_engine("glmnet")
+
+# Definimos la grilla de párametrospenalty
+
+grid_values <- grid_regular(penalty(range = c(-3, 3)), levels = 50) %>%
+  expand_grid(mixture = seq(0, 1, by = 0.05))
+
+set.seed(8693645)
+db_fold <- vfold_cv(train, v = 10)
+
+# Definimos la tercera receta 
+
+rec_6 <- recipe(price ~ dis_parque + area_parque + dis_rest + dis_centro + dis_estacion + dis_cc + dis_hosp + dis_col + dis_uni + dis_pol + dis_disco + dis_banco + rooms + bathrooms + bedrooms + property_type + piso_numerico+ n_pisos_numerico + garaje + capgaraje + deposito + terraza + gym + salon_social + piscina + bbq + cancha + ascensor, data = train) %>%
+  step_interact(terms = ~ dis_parque:property_type + area_parque:property_type + dis_rest:property_type + dis_centro:property_type + dis_estacion:property_type + dis_cc:property_type + dis_hosp:property_type + dis_col:property_type + dis_uni:property_type + dis_pol:property_type + dis_disco:property_type + dis_banco:property_type + rooms:property_type + bathrooms:property_type + bedrooms:property_type + deposito:property_type + terraza:property_type + capgaraje:property_type + gym:property_type + salon_social:property_type + piscina:property_type + bbq:property_type + cancha:property_type + ascensor:property_type) %>% # creamos interacciones con el tipo de propiedad
+  step_novel(all_nominal_predictors()) %>%   # para las clases no antes vistas en el train. 
+  step_dummy(all_nominal_predictors()) %>%  # crea dummies para las variables categóricas
+  step_zv(all_predictors()) %>%   #  elimina predictores con varianza cero (constantes)
+  step_normalize(all_predictors())  # normaliza los predictores.
+
+# Definimos  flujo de trabajo
+
+workflow_6 <- workflow() %>% 
+  # Agregar la receta de pre-procesamiento de datos. En este caso la receta 1
+  add_recipe(rec_6) %>%
+  # Agregar la especificación del modelo de regresión Elastic Net
+  add_model(elastic_net_spec)
+
+# Entrenamiento de hiperparametros 
+
+set.seed(200447)
+
+tune_res6 <- tune_grid(
+  workflow_6,         # El flujo de trabajo que contiene: receta y especificación del modelo
+  resamples = db_fold,  # Folds de validación cruzada
+  grid = grid_values,        # Grilla de valores de penalización
+  metrics = metric_set(mae)  # métrica
+)
+
+collect_metrics(tune_res6)
+
+best_penalty_6 <- select_best(tune_res6, metric = "mae")
+best_penalty_6
+
+EN_final6 <- finalize_workflow(workflow_6, best_penalty_6)
+
+EN_final6_fit <- fit(EN_final6, data = train)
+
+predicciones <- predict(EN_final6_fit , new_data = test)
+
+# Combinar property_id con las predicciones
+
+predictionsample <- test %>%
+  select(property_id) %>%  # Seleccionar solo el property_id
+  mutate(price = predicciones $.pred)  # Añadir las predicciones como nueva columna
+
+head(predictionsample)
+
+# Aproximamos
+predictionsample <- predictionsample %>%
+  mutate(price=floor(price))
+
+# Leer el archivo de template para asegurar el formato de salida
+
+template <- read.csv("submission_template.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+
+name<- paste0("EN_lambda_", "0001", "_alpha_" , "05","_3", ".csv")  
+write.csv(predictionsample,name, row.names = FALSE)
+
+# Random forest 2 ---------------------------------------------------------
+
+# Usaremos la recipie 3 
+
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+random_forest<- rand_forest(
+  mtry = tune(),     # Número de predictores seleccionados aleatoriamente
+  trees = 500,      # Número de árboles
+  min_n = tune()     # Número mínimo de observaciones por hoja
+) %>%
+  set_engine("ranger", max.depth = 10) %>%  # Motor para Random Forest limitando la profundidad
+  set_mode("regression")    # Usamos regresión para el precio
+
+# Definimos la grilla de párametrospenalty
+set.seed(869362004)
+grid_values <- grid_random(
+  mtry(range = c(2, 12)),  # Ajusta mtry al 50% de los predictores para la receta 1 son un total de 23 predictore
+  min_n(range = c(5, 25)),   # Rango estándar para min_n
+  size = 20 )                # Número de combinaciones aleatorias
+
+set.seed(869362004)
+db_fold <- vfold_cv(train, v = 10)
+
+# Definimos  flujo de trabajo
+workflow_3 <- workflow() %>%
+  # El flujo de trabajo que contiene: receta y especificación del modelo
+  add_recipe(rec_3) %>%
+  # Agregar la especificación del modelo random forestpaa
+  add_model(random_forest)
+
+# Entrenamiento de hiperparametros 
+
+# Configurar paralelización
+
+num_cores <- parallel::detectCores() - 2  # Usa todos menos 2 núcleos
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Control de paralelización
+
+control_parallel <- control_resamples(
+  save_pred = TRUE, 
+  verbose = TRUE, 
+  parallel_over = "resamples"
+)
+
+set.seed(200447)
+
+handlers("txtprogressbar")  # Configurar barra de progreso en consola
+
+with_progress({
+  tune_res3 <- tune_grid(
+    workflow_3,         # Flujo de trabajo con receta y modelo
+    resamples = db_fold,  # Validación cruzada
+    grid = grid_values,   # Grilla de hiperparámetros
+    metrics = metric_set(mae),  # Métrica para evaluar
+    control = control_parallel
+  )
+})
+
+stopCluster(cl) # Finalizar paralelización
+registerDoSEQ()  # Restablecer el backend a secuencial
+
+collect_metrics(tune_res3)
+
+best_rf3 <- select_best(tune_res3, metric = "mae")
+best_rf3
+
+rf_final3 <- finalize_workflow(workflow_3, best_rf3)
+
+rf_final3_fit <- fit(rf_final3, data = train)
+
+predicciones <- predict(rf_final3_fit , new_data = test)
+
+# Combinar property_id con las predicciones
+
+predictionsample <- test %>%
+  select(property_id) %>%  # Seleccionar solo el property_id
+  mutate(price = predicciones $.pred)  # Añadir las predicciones como nueva columna
+
+head(predictionsample)
+
+# Aproximamos
+predictionsample <- predictionsample %>%
+  mutate(price=floor(price))
+
+# Leer el archivo de template para asegurar el formato de salida
+
+template <- read.csv("submission_template.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+
+name<- paste0("Random_forest_", "recipe_3" , ".csv")  
+write.csv(predictionsample,name, row.names = FALSE)
+
+# Random forest 3 ---------------------------------------------------------
+
+# Usaremos la recipie 5
+
+sf_test <- st_as_sf(test, coords = c("lon", "lat"),  crs = 4326)
+sf_train <- st_as_sf(train, coords = c("lon", "lat"),  crs = 4326)
+
+random_forest<- rand_forest(
+  mtry = tune(),     # Número de predictores seleccionados aleatoriamente
+  trees = 600,      # Número de árboles
+  min_n = tune()     # Número mínimo de observaciones por hoja
+) %>%
+  set_engine("ranger", max.depth = 15) %>%  # Motor para Random Forest limitando la profundidad
+  set_mode("regression")    # Usamos regresión para el precio
+
+# Definimos la grilla de párametrospenalty
+set.seed(869362004)
+grid_values <- grid_random(
+  mtry(range = c(2, 12)),  # Ajusta mtry al 50% de los predictores para la receta 1 son un total de 23 predictore
+  min_n(range = c(5, 25)),   # Rango estándar para min_n
+  size = 20 )                # Número de combinaciones aleatorias
+
+set.seed(869362004)
+db_fold <- vfold_cv(train, v = 10)
+
+# Definimos  flujo de trabajo
+workflow_5 <- workflow() %>%
+  # El flujo de trabajo que contiene: receta y especificación del modelo
+  add_recipe(rec_5) %>%
+  # Agregar la especificación del modelo random forestpaa
+  add_model(random_forest)
+
+# Entrenamiento de hiperparametros 
+
+# Configurar paralelización
+
+num_cores <- parallel::detectCores() - 2  # Usa todos menos 2 núcleos
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Control de paralelización
+
+control_parallel <- control_resamples(
+  save_pred = TRUE, 
+  verbose = TRUE, 
+  parallel_over = "resamples"
+)
+
+set.seed(200447)
+
+handlers("txtprogressbar")  # Configurar barra de progreso en consola
+
+with_progress({
+  tune_res5 <- tune_grid(
+    workflow_5,         # Flujo de trabajo con receta y modelo
+    resamples = db_fold,  # Validación cruzada
+    grid = grid_values,   # Grilla de hiperparámetros
+    metrics = metric_set(mae),  # Métrica para evaluar
+    control = control_parallel
+  )
+})
+
+stopCluster(cl) # Finalizar paralelización
+registerDoSEQ()  # Restablecer el backend a secuencial
+
+collect_metrics(tune_res3)
+
+best_rf5 <- select_best(tune_res5, metric = "mae")
+best_rf5
+
+rf_final5 <- finalize_workflow(workflow_5, best_rf3)
+
+rf_final5_fit <- fit(rf_final5, data = train)
+
+predicciones <- predict(rf_final5_fit , new_data = test)
+
+# Combinar property_id con las predicciones
+
+predictionsample <- test %>%
+  select(property_id) %>%  # Seleccionar solo el property_id
+  mutate(price = predicciones $.pred)  # Añadir las predicciones como nueva columna
+
+head(predictionsample)
+
+# Aproximamos
+predictionsample <- predictionsample %>%
+  mutate(price=floor(price))
+
+# Leer el archivo de template para asegurar el formato de salida
+
+template <- read.csv("submission_template.csv")
+head(template)
+
+# Guardar el archivo de predicciones
+
+name<- paste0("Random_forest_", "recipe_5" , ".csv")  
+write.csv(predictionsample,name, row.names = FALSE)
+
