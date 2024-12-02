@@ -1,0 +1,6 @@
+Datos transmilenio:   https://datosabiertos-transmilenio.hub.arcgis.com/datasets/5365d814bbdd4062a59234eea7d70db7_0/explore?location=4.717927%2C-74.132303%2C10.91
+Datos barrios:   https://www.ideca.gov.co/recursos/mapas/sector-catastral
+Datos localidad:   https://www.ideca.gov.co/recursos/mapas/localidad-bogota-dc
+Cicloruta:   https://datosabiertos.bogota.gov.co/dataset/cicloruta-bogota-d-c
+Cuadrantes de policia:  https://www.ideca.gov.co/recursos/mapas/cuadrantes-de-policia
+Estaciones de policia: https://www.ideca.gov.co/recursos/mapas/estacion-de-policia-bogota-dc
