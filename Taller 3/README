@@ -1,4 +1,5 @@
 En esta carpeta se encuentran todas las bases de datos complementarias que se utilizan en los modelos finales del trabajo
 El archivo script_taller3 contiene los codigos que utilizan estos datos en su proceso y que genera los modelos finales
 Para correr este codigo en R solo se debe ajustar el directorio en la linea 24 y tener los datos que se encuentran aca en la carpeta de directorio junto con los archivos de train y test
-
+POr otra parte el archivo T3 contiene una version alterna que utilizan estos datos en su proceso y que genera los modelos finales
+Para correr este codigo en R solo se debe ajustar el directorio en la linea 39 y tener los datos que se encuentran aca en la carpeta de directorio junto con los archivos de train
